@@ -102,7 +102,6 @@ class McpManager {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var __webOrchestratorMcpManager: McpManager | undefined;
 }
 

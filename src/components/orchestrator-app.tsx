@@ -263,7 +263,7 @@ export function OrchestratorApp() {
   const [manualAgent, setManualAgent] = useState("researcher");
   const [manualPrompt, setManualPrompt] = useState("Summarize the latest AI SDK v6 updates.");
 
-  const loadThreads = useCallback(async () => {
+  const reloadThreads = useCallback(async () => {
     const response = await fetch("/api/threads", { cache: "no-store" });
     const payload = (await response.json()) as { threads: ThreadSummary[] };
     setThreads(payload.threads);
@@ -273,7 +273,7 @@ export function OrchestratorApp() {
     }
   }, [selectedThreadId]);
 
-  const loadThreadState = useCallback(async (threadId: string) => {
+  const reloadThreadState = useCallback(async (threadId: string) => {
     const response = await fetch(`/api/threads/${threadId}/state`, {
       cache: "no-store",
     });
@@ -288,16 +288,56 @@ export function OrchestratorApp() {
   }, []);
 
   useEffect(() => {
-    void loadThreads();
-  }, [loadThreads]);
+    let cancelled = false;
+
+    void fetch("/api/threads", { cache: "no-store" })
+      .then((response) => response.json() as Promise<{ threads: ThreadSummary[] }>)
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+
+        setThreads(payload.threads);
+        if (!selectedThreadId) {
+          setSelectedThreadId(payload.threads[0]?.id ?? null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedThreadId]);
 
   useEffect(() => {
     if (!selectedThreadId) {
       return;
     }
 
-    void loadThreadState(selectedThreadId);
-  }, [selectedThreadId, loadThreadState]);
+    let cancelled = false;
+
+    void fetch(`/api/threads/${selectedThreadId}/state`, {
+      cache: "no-store",
+    })
+      .then((response) => {
+        if (!response.ok) {
+          return null;
+        }
+
+        return response.json() as Promise<ThreadState>;
+      })
+      .then((payload) => {
+        if (!payload || cancelled) {
+          return;
+        }
+
+        setThreadState(payload);
+        setChatRenderKey((value) => value + 1);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedThreadId]);
 
   useEffect(() => {
     if (!selectedThreadId || isStreaming) {
@@ -339,13 +379,13 @@ export function OrchestratorApp() {
         });
 
         if (hasTerminalUpdate) {
-          void loadThreadState(selectedThreadId);
+          void reloadThreadState(selectedThreadId);
         }
       });
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [selectedThreadId, isStreaming, threadState.backgroundTasks, loadThreadState]);
+  }, [selectedThreadId, isStreaming, threadState.backgroundTasks, reloadThreadState]);
 
   const selectedThread = useMemo(() => {
     return threads.find((thread) => thread.id === selectedThreadId) ?? null;
@@ -367,7 +407,7 @@ export function OrchestratorApp() {
               onClick={() => {
                 startTransition(async () => {
                   const created = await createThreadAction("New Web Orchestrator Thread");
-                  await loadThreads();
+                  await reloadThreads();
                   setSelectedThreadId(created.id);
                 });
               }}
@@ -413,7 +453,7 @@ export function OrchestratorApp() {
                 threadId={selectedThreadId}
                 initialMessages={threadState.messages}
                 onRefresh={async () => {
-                  await loadThreadState(selectedThreadId);
+                  await reloadThreadState(selectedThreadId);
                 }}
                 onStatusChange={setIsStreaming}
               />
@@ -463,7 +503,7 @@ export function OrchestratorApp() {
                                 status: nextStatus as Todo["status"],
                               });
                               if (selectedThreadId) {
-                                await loadThreadState(selectedThreadId);
+                                await reloadThreadState(selectedThreadId);
                               }
                             });
                           }}
@@ -535,7 +575,7 @@ export function OrchestratorApp() {
                           title: `Manual background delegation (${manualAgent})`,
                         });
 
-                        await loadThreadState(selectedThreadId);
+                        await reloadThreadState(selectedThreadId);
                       });
                     }}
                     disabled={!selectedThreadId || pending}

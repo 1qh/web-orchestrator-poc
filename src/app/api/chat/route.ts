@@ -50,7 +50,11 @@ const mcpSchema = z.object({
 });
 
 function stripMessageIds(messages: UIMessage[]): Array<Omit<UIMessage, "id">> {
-  return messages.map(({ id: _id, ...rest }) => rest);
+  return messages.map((message) => {
+    const copy = { ...message };
+    delete (copy as { id?: string }).id;
+    return copy;
+  });
 }
 
 function asMessageArray(input: UIMessage[] | undefined, message?: UIMessage): UIMessage[] {
