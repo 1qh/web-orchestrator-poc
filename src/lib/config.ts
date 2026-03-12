@@ -1,3 +1,12 @@
+const resolvedGoogleApiKey =
+  process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GOOGLE_VERTEX_API_KEY;
+
+if (resolvedGoogleApiKey && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+  process.env.GOOGLE_GENERATIVE_AI_API_KEY = resolvedGoogleApiKey;
+}
+
+export const HAS_GOOGLE_API_KEY = Boolean(resolvedGoogleApiKey);
+
 export const DEFAULT_MODEL = process.env.ORCHESTRATOR_MODEL ?? "gemini-2.5-flash";
 
 export const GROUNDING_MODEL =
