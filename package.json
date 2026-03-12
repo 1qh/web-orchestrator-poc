@@ -9,6 +9,9 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "test:e2e": "vitest run",
+    "test:e2e:live": "tsx scripts/live-e2e.ts",
+    "test:all": "bun test && vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun run src/lib/db/run-migrations.ts"
   },
@@ -44,7 +47,9 @@
     "eslint-config-next": "16.1.6",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",
-    "typescript": "^5"
+    "tsx": "^4.21.0",
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   },
   "ignoreScripts": [
     "sharp",
