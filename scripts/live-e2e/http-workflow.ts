@@ -60,6 +60,10 @@ export async function runChatAndAssert(baseUrl: string, threadId: string): Promi
     throw new Error("Chat response stream body was empty");
   }
 
+  if (!chatBody.includes("LIVE_CHAT_OK")) {
+    throw new Error("Chat response did not include LIVE_CHAT_OK token");
+  }
+
   const chatStateResponse = await fetch(`${baseUrl}/api/threads/${threadId}/state`, {
     cache: "no-store",
   });
@@ -70,10 +74,15 @@ export async function runChatAndAssert(baseUrl: string, threadId: string): Promi
 
   const chatStatePayload = (await chatStateResponse.json()) as {
     messages: Array<{ role: string }>;
+    usage: { totalTokens: number };
   };
 
   if (!chatStatePayload.messages.some((message) => message.role === "assistant")) {
     throw new Error("Thread state after chat did not include assistant message");
+  }
+
+  if (chatStatePayload.usage.totalTokens <= 0) {
+    throw new Error("Thread usage did not increase after chat");
   }
 }
 
