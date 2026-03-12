@@ -458,6 +458,7 @@ export async function updateBackgroundTask(args: {
   progress?: number;
   output?: JsonValue;
   errorText?: string;
+  triggerRunId?: string;
 }): Promise<void> {
   ensureDatabaseInitialized();
 
@@ -484,6 +485,7 @@ export async function updateBackgroundTask(args: {
       progress: args.progress ?? undefined,
       outputJson: args.output ? stringifyJson(args.output) : undefined,
       errorText: args.errorText ?? undefined,
+      triggerRunId: args.triggerRunId,
       updatedAt: ts,
       startedAt: nextStatus === "running" ? ts : undefined,
       finishedAt:
