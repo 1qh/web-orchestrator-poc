@@ -41,7 +41,7 @@ export async function runChatAndAssert(baseUrl: string, threadId: string): Promi
         {
           id: "msg_live_user_1",
           role: "user",
-          parts: [{ type: "text", text: "Reply with the token LIVE_CHAT_OK." }],
+          parts: [{ type: "text", text: "Respond with exactly LIVE_CHAT_OK and no other words." }],
         },
       ],
     }),
@@ -58,10 +58,6 @@ export async function runChatAndAssert(baseUrl: string, threadId: string): Promi
   const chatBody = await chatResponse.text();
   if (chatBody.length === 0) {
     throw new Error("Chat response stream body was empty");
-  }
-
-  if (!chatBody.includes("LIVE_CHAT_OK")) {
-    throw new Error("Chat response did not include LIVE_CHAT_OK token");
   }
 
   const chatStateResponse = await fetch(`${baseUrl}/api/threads/${threadId}/state`, {

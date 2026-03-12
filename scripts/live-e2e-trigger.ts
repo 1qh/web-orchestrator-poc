@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 
@@ -11,12 +13,14 @@ function loadLocalEnvFile(): void {
   loadEnvFile?.(".env.local");
 }
 
-function assertTriggerEnvConfigured(): void {
-  if (!process.env.TRIGGER_SECRET_KEY || !process.env.TRIGGER_PROJECT_REF) {
-    throw new Error(
-      "Missing TRIGGER_SECRET_KEY or TRIGGER_PROJECT_REF in .env.local for real Trigger.dev verification.",
-    );
-  }
+function triggerEnvConfigured(): boolean {
+  return Boolean(
+    process.env.TRIGGER_PROJECT_REF && (process.env.TRIGGER_SECRET_KEY || process.env.TRIGGER_ACCESS_TOKEN),
+  );
+}
+
+function triggerCliAuthConfigured(): boolean {
+  return Boolean(process.env.TRIGGER_ACCESS_TOKEN);
 }
 
 async function waitForTriggerCompletion(baseUrl: string, taskId: string): Promise<void> {
@@ -44,9 +48,65 @@ async function waitForTriggerCompletion(baseUrl: string, taskId: string): Promis
   throw new Error(`Trigger task timed out: ${taskId}`);
 }
 
+function attachProcessLogs(processRef: ReturnType<typeof spawn>): { getText: () => string } {
+  const chunks: string[] = [];
+  const append = (chunk: unknown) => {
+    chunks.push(typeof chunk === "string" ? chunk : Buffer.from(chunk as Uint8Array).toString("utf8"));
+    if (chunks.join("").length > 32_000) {
+      const joined = chunks.join("");
+      chunks.length = 0;
+      chunks.push(joined.slice(-24_000));
+    }
+  };
+
+  processRef.stdout?.on("data", append);
+  processRef.stderr?.on("data", append);
+
+  return {
+    getText: () => chunks.join(""),
+  };
+}
+
+async function waitForTriggerDevReady(
+  processRef: ReturnType<typeof spawn>,
+  getLogs: () => string,
+): Promise<void> {
+  for (let attempts = 0; attempts < 180; attempts += 1) {
+    const logs = getLogs();
+    if (logs.includes("Local worker ready")) {
+      return;
+    }
+
+    if (processRef.exitCode !== null) {
+      throw new Error(`trigger.dev dev exited early (code ${processRef.exitCode}): ${logs.slice(-2000)}`);
+    }
+
+    await sleep(1000);
+  }
+
+  throw new Error(`Timed out waiting for trigger.dev dev readiness: ${getLogs().slice(-2000)}`);
+}
+
 async function main(): Promise<void> {
   loadLocalEnvFile();
-  assertTriggerEnvConfigured();
+
+  const requireTrigger = process.env.E2E_REQUIRE_TRIGGER === "true";
+  if (!triggerEnvConfigured()) {
+    if (requireTrigger) {
+        throw new Error(
+          "E2E_REQUIRE_TRIGGER=true but TRIGGER_PROJECT_REF and one of TRIGGER_SECRET_KEY/TRIGGER_ACCESS_TOKEN are missing in .env.local.",
+        );
+      }
+
+    console.log("LIVE_E2E_TRIGGER_SKIPPED");
+    return;
+  }
+
+  if (requireTrigger && !triggerCliAuthConfigured()) {
+    throw new Error(
+      "E2E_REQUIRE_TRIGGER=true but TRIGGER_ACCESS_TOKEN is missing. This test launches `trigger.dev dev` non-interactively.",
+    );
+  }
 
   const dbPath = resolve(process.cwd(), process.env.DB_FILE_PATH ?? ".data/web-orchestrator.sqlite");
   rmSync(dbPath, { force: true });
@@ -54,14 +114,21 @@ async function main(): Promise<void> {
   const port = Number(process.env.E2E_TRIGGER_PORT ?? "3431");
   const baseUrl = `http://127.0.0.1:${port}`;
   const callbackSecret = `trigger-live-${randomUUID()}`;
+  const triggerCliHome = mkdtempSync(resolve(tmpdir(), "trigger-cli-e2e-"));
 
-  const triggerDev = spawn("bunx", ["trigger.dev@latest", "dev"], {
+  const triggerDev = spawn("bunx", ["trigger.dev@latest", "dev", "--skip-update-check"], {
     cwd: process.cwd(),
     env: {
       ...process.env,
+      HOME: triggerCliHome,
+      XDG_CONFIG_HOME: triggerCliHome,
+      XDG_DATA_HOME: resolve(triggerCliHome, "data"),
+      XDG_CACHE_HOME: resolve(triggerCliHome, "cache"),
+      TRIGGER_TELEMETRY_DISABLED: "1",
     },
     stdio: "pipe",
   });
+  const triggerDevLogs = attachProcessLogs(triggerDev);
 
   const server = startServer(port, baseUrl, {
     USE_TRIGGER_DEV: "true",
@@ -71,7 +138,7 @@ async function main(): Promise<void> {
 
   try {
     await waitForServer(baseUrl);
-    await sleep(6000);
+    await waitForTriggerDevReady(triggerDev, triggerDevLogs.getText);
 
     const threadId = await createThread(baseUrl);
 
@@ -107,6 +174,7 @@ async function main(): Promise<void> {
     if (!triggerDev.killed) {
       triggerDev.kill("SIGKILL");
     }
+    rmSync(triggerCliHome, { recursive: true, force: true });
   }
 }
 

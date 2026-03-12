@@ -13,6 +13,13 @@
     "test:e2e:live": "tsx scripts/live-e2e.ts",
     "test:e2e:live:full": "tsx scripts/live-e2e-full.ts",
     "test:e2e:live:trigger": "tsx scripts/live-e2e-trigger.ts",
+    "test:e2e:proof:selfhost": "tsx scripts/live-e2e-proof.ts",
+    "trigger:selfhost:start": "tsx scripts/trigger-selfhost/start.ts",
+    "trigger:selfhost:reset": "tsx scripts/trigger-selfhost/reset.ts",
+    "trigger:selfhost:status": "tsx scripts/trigger-selfhost/status.ts",
+    "trigger:selfhost:bootstrap": "tsx scripts/trigger-selfhost/bootstrap.ts",
+    "trigger:selfhost:worker-token": "tsx scripts/trigger-selfhost/worker-token.ts",
+    "trigger:selfhost:stop": "tsx scripts/trigger-selfhost/stop.ts",
     "test:all": "bun test && vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun run src/lib/db/run-migrations.ts"

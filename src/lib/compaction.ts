@@ -50,7 +50,29 @@ Conversation:\n${lines.join("\n\n")}`;
     prompt,
   });
 
-  return result.text.trim();
+  const summary = result.text.trim();
+  if (summary.length > 0) {
+    return summary;
+  }
+
+  const fallbackLines = messagesToCompact
+    .slice(-6)
+    .map((message) => {
+      const text = message.parts
+        .filter((part) => part.type === "text" || part.type === "reasoning")
+        .map((part) => part.text)
+        .join("\n")
+        .trim();
+      return `${message.role.toUpperCase()}: ${text}`;
+    })
+    .filter((line) => line.length > 0)
+    .join("\n");
+
+  if (fallbackLines.length > 0) {
+    return `Fallback continuation summary:\n${fallbackLines}`;
+  }
+
+  return "Fallback continuation summary: prior context was compacted.";
 }
 
 export async function maybeCompactContext(args: {

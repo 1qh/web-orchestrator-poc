@@ -8,6 +8,7 @@ import {
   runChatAndAssert,
   startBackgroundAndWait,
 } from "./live-e2e/http-workflow";
+import { startMcpTestServer } from "./live-e2e/mcp-test-server";
 import { assertChatRemainsUsableWhileBackgroundRuns } from "./live-e2e/non-blocking-workflow";
 import { startProductionServer, stopServer, waitForServer } from "./live-e2e/server-process";
 
@@ -36,6 +37,12 @@ async function runInternalCapabilityVerification(baseUrl: string, threadId: stri
       mcpConnectivityChecked: boolean;
       mcpConnectivityOk: boolean;
       mcpToolCount: number;
+      mcpToolCallAttempted: boolean;
+      mcpToolCallOk: boolean;
+      reasoningPartVisible: boolean;
+      toolPartVisible: boolean;
+      unfinishedReminderVisible: boolean;
+      backgroundDoneReminderVisible: boolean;
     };
   };
 
@@ -56,20 +63,37 @@ async function runInternalCapabilityVerification(baseUrl: string, threadId: stri
   }
 
   if (!payload.checks.compactionTriggered || payload.checks.compactionSummaryLength <= 0) {
-    throw new Error("Compaction verification failed");
+    throw new Error(
+      `Compaction verification failed (triggered=${String(payload.checks.compactionTriggered)}, summaryLength=${payload.checks.compactionSummaryLength})`,
+    );
   }
 
   if (payload.checks.usageTotalTokens <= 0) {
     throw new Error("Usage verification did not accumulate tokens");
   }
 
-  const requireMcp = process.env.E2E_REQUIRE_MCP === "true";
-  if (requireMcp && payload.checks.mcpServerCount <= 0) {
-    throw new Error("E2E_REQUIRE_MCP=true but no MCP server is configured in MCP_SERVERS_JSON.");
+  if (payload.checks.mcpServerCount <= 0) {
+    throw new Error("MCP verification failed: no MCP server configured.");
   }
 
-  if (payload.checks.mcpConnectivityChecked && !payload.checks.mcpConnectivityOk) {
+  if (!payload.checks.mcpConnectivityChecked || !payload.checks.mcpConnectivityOk) {
     throw new Error("MCP server is configured but connectivity verification failed.");
+  }
+
+  if (payload.checks.mcpToolCount <= 0) {
+    throw new Error("MCP verification failed: server reported no tools.");
+  }
+
+  if (!payload.checks.mcpToolCallAttempted || !payload.checks.mcpToolCallOk) {
+    throw new Error("MCP verification failed: deterministic MCP tool call did not succeed.");
+  }
+
+  if (!payload.checks.reasoningPartVisible || !payload.checks.toolPartVisible) {
+    throw new Error("Visibility verification failed: reasoning/tool-call parts were not present in persisted messages.");
+  }
+
+  if (!payload.checks.unfinishedReminderVisible || !payload.checks.backgroundDoneReminderVisible) {
+    throw new Error("Reminder verification failed: unfinished/background reminder messages were not visible.");
   }
 }
 
@@ -105,12 +129,28 @@ async function main(): Promise<void> {
   assertApiKeyConfigured();
   ensureProductionBuild();
 
+  const mcpPort = Number(process.env.E2E_MCP_PORT ?? "3591");
+  const mcpServer = await startMcpTestServer(mcpPort);
+  const mcpServersJson = JSON.stringify([
+    {
+      name: "local-live-e2e-mcp",
+      url: mcpServer.url,
+    },
+  ]);
+
   const dbPath = resolve(process.cwd(), process.env.DB_FILE_PATH ?? ".data/web-orchestrator.sqlite");
   rmSync(dbPath, { force: true });
 
   const port = Number(process.env.E2E_PORT ?? "3421");
   const baseUrl = `http://127.0.0.1:${port}`;
-  const server = startProductionServer(port, baseUrl);
+  const server = startProductionServer(port, baseUrl, {
+    USE_TRIGGER_DEV: "false",
+    MCP_SERVERS_JSON: mcpServersJson,
+    E2E_MCP_TOOL_NAME: "health_check",
+    CONTEXT_TOKEN_BUDGET: "4000",
+    CONTEXT_COMPACTION_TRIGGER_RATIO: "0.5",
+    UNFINISHED_TODO_REMINDER_MINUTES: "0",
+  });
 
   try {
     await waitForServer(baseUrl);
@@ -127,6 +167,7 @@ async function main(): Promise<void> {
     console.log("LIVE_E2E_FULL_OK");
   } finally {
     await stopServer(server);
+    await mcpServer.stop();
   }
 }
 

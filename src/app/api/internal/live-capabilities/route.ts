@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { UIMessage } from "ai";
 import { z } from "zod";
 
 import { maybeCompactContext } from "@/lib/compaction";
@@ -12,7 +13,7 @@ import {
   persistThreadMessages,
 } from "@/lib/store";
 import { runDelegationTool } from "@/lib/tools/delegation";
-import { listMcpServerTools, listMcpServers } from "@/lib/tools/mcp";
+import { listMcpServerTools, listMcpServers, runMcpTool } from "@/lib/tools/mcp";
 import { runGroundedSearch } from "@/lib/tools/search";
 import { runTodoTool } from "@/lib/tools/todos";
 
@@ -33,6 +34,35 @@ function seededLongMessages(count: number): SeedMessage[] {
     role: index % 2 === 0 ? "user" : "assistant",
     parts: [{ type: "text", text: `${index}: ${chunk}` }],
   }));
+}
+
+function seededVisibilityMessage(): UIMessage {
+  return {
+    id: "msg_internal_visibility",
+    role: "assistant",
+    parts: [
+      {
+        type: "reasoning",
+        text: "LIVE_REASONING_VISIBILITY_OK",
+      },
+      {
+        type: "text",
+        text: "LIVE_TEXT_VISIBILITY_OK",
+      },
+      {
+        type: "dynamic-tool",
+        toolName: "search",
+        toolCallId: "live_visibility_tool_call",
+        state: "output-available",
+        input: {
+          query: "visibility probe",
+        },
+        output: {
+          summary: "LIVE_TOOL_VISIBILITY_OK",
+        },
+      },
+    ],
+  };
 }
 
 async function waitTask(taskId: string): Promise<void> {
@@ -96,6 +126,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   })) as { tasks: Array<{ task: { taskId: string } }> };
 
   await Promise.all(parallelBackground.tasks.map((entry) => waitTask(entry.task.taskId)));
+  await processDueReminders();
 
   const created = (await runTodoTool({
     action: "create",
@@ -116,6 +147,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
   }
 
+  const visibilityMessages = await loadThreadMessages(threadId);
+  await persistThreadMessages({
+    threadId,
+    allMessages: [...visibilityMessages, seededVisibilityMessage()],
+    model: "live-capability-model",
+  });
+
   await persistThreadMessages({
     threadId,
     allMessages: seededLongMessages(14),
@@ -128,16 +166,57 @@ export async function POST(request: Request): Promise<NextResponse> {
   const usage = await getThreadUsage(threadId);
   const mcpServers = listMcpServers();
 
+  const reasoningPartVisible = messages.some((message) =>
+    message.parts.some((part) => part.type === "reasoning"),
+  );
+  const toolPartVisible = messages.some((message) =>
+    message.parts.some((part) => part.type === "dynamic-tool" || part.type.startsWith("tool-")),
+  );
+  const unfinishedReminderVisible = messages.some(
+    (message) =>
+      message.role === "system" &&
+      message.parts.some(
+        (part) =>
+          part.type === "text" &&
+          part.text.toLowerCase().includes("unfinished todo"),
+      ),
+  );
+  const backgroundDoneReminderVisible = messages.some(
+    (message) =>
+      message.role === "system" &&
+      message.parts.some(
+        (part) =>
+          part.type === "text" &&
+          part.text.toLowerCase().includes("background task"),
+      ),
+  );
+
   let mcpConnectivityChecked = false;
   let mcpConnectivityOk = false;
   let mcpToolCount = 0;
+  let mcpToolCallAttempted = false;
+  let mcpToolCallOk = false;
+  const e2eMcpToolName = process.env.E2E_MCP_TOOL_NAME;
 
   if (mcpServers.length > 0) {
     mcpConnectivityChecked = true;
     try {
-      const tools = await listMcpServerTools(mcpServers[0]?.name ?? "");
+      const firstServerName = mcpServers[0]?.name ?? "";
+      const tools = await listMcpServerTools(firstServerName);
       mcpToolCount = tools.tools.length;
       mcpConnectivityOk = true;
+
+      if (e2eMcpToolName && tools.tools.some((entry) => entry.name === e2eMcpToolName)) {
+        mcpToolCallAttempted = true;
+        await runMcpTool({
+          serverName: firstServerName,
+          toolName: e2eMcpToolName,
+          toolArgs: {
+            echo: "live-e2e",
+          },
+        });
+        mcpToolCallOk = true;
+      }
     } catch {
       mcpConnectivityOk = false;
     }
@@ -157,6 +236,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       mcpConnectivityChecked,
       mcpConnectivityOk,
       mcpToolCount,
+      mcpToolCallAttempted,
+      mcpToolCallOk,
+      reasoningPartVisible,
+      toolPartVisible,
+      unfinishedReminderVisible,
+      backgroundDoneReminderVisible,
     },
   });
 }
