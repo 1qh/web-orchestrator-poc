@@ -5,6 +5,10 @@ const runtimeMocks = vi.hoisted(() => {
   const convertToModelMessagesMock = vi.fn(async (messages: unknown) => messages);
   const stepCountIsMock = vi.fn((count: number) => count);
   const toolMock = vi.fn((definition: unknown) => definition);
+  const googleSearchToolMock = vi.fn((options: unknown) => ({
+    kind: "google_search",
+    options,
+  }));
   const streamTextMock = vi.fn((options: Record<string, unknown>) => ({
     toUIMessageStreamResponse: async ({
       originalMessages,
@@ -40,7 +44,15 @@ const runtimeMocks = vi.hoisted(() => {
           reasoningTokens: 0,
         },
         text: "MOCK_CHAT_REPLY",
-        toolCalls: [],
+        toolCalls: [
+          {
+            toolName: "search",
+            toolCallId: "call_mock_1",
+            input: {
+              query: "mock query",
+            },
+          },
+        ],
       });
 
       await (
@@ -58,7 +70,27 @@ const runtimeMocks = vi.hoisted(() => {
       const responseMessage = {
         id: "msg_mock_assistant",
         role: "assistant",
-        parts: [{ type: "text", text: "MOCK_CHAT_REPLY" }],
+        parts: [
+          {
+            type: "reasoning",
+            text: "MOCK_REASONING_TRACE",
+          },
+          {
+            type: "text",
+            text: "MOCK_CHAT_REPLY",
+          },
+          {
+            type: "dynamic-tool",
+            toolName: "search",
+            state: "output-available",
+            input: {
+              query: "mock query",
+            },
+            output: {
+              summary: "MOCK_TOOL_OUTPUT",
+            },
+          },
+        ],
       };
       const messages = [...originalMessages, responseMessage];
 
@@ -76,6 +108,11 @@ const runtimeMocks = vi.hoisted(() => {
 
   const triggerMock = vi.fn(async () => ({ id: "trigger_mock" }));
   const googleMock = vi.fn((model: string) => ({ provider: "google", model }));
+  Object.assign(googleMock, {
+    tools: {
+      googleSearch: googleSearchToolMock,
+    },
+  });
 
   return {
     generateTextMock,
@@ -85,6 +122,7 @@ const runtimeMocks = vi.hoisted(() => {
     streamTextMock,
     triggerMock,
     googleMock,
+    googleSearchToolMock,
   };
 });
 
@@ -118,4 +156,5 @@ export function clearRuntimeMocks(): void {
   runtimeMocks.toolMock.mockClear();
   runtimeMocks.triggerMock.mockClear();
   runtimeMocks.googleMock.mockClear();
+  runtimeMocks.googleSearchToolMock.mockClear();
 }

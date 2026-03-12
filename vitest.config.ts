@@ -7,6 +7,7 @@ export default defineConfig({
     environment: "node",
     clearMocks: true,
     restoreMocks: true,
+    fileParallelism: false,
   },
   resolve: {
     alias: {
