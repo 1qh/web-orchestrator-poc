@@ -41,6 +41,12 @@ bun test
 bun run test:e2e
 # Requires valid Google API key in .env.local
 bun run test:e2e:live
+# Extended non-mock capability verification (real HTTP + real tools + real persistence)
+bun run test:e2e:live:full
+# Optional strict MCP requirement during full live verification
+# E2E_REQUIRE_MCP=true MCP_SERVERS_JSON='[{"name":"...","url":"..."}]' bun run test:e2e:live:full
+# Optional: real Trigger.dev transport verification (requires TRIGGER_SECRET_KEY + TRIGGER_PROJECT_REF)
+bun run test:e2e:live:trigger
 bun run build
 ```
 

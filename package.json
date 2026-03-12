@@ -11,6 +11,8 @@
     "test": "bun test",
     "test:e2e": "vitest run",
     "test:e2e:live": "tsx scripts/live-e2e.ts",
+    "test:e2e:live:full": "tsx scripts/live-e2e-full.ts",
+    "test:e2e:live:trigger": "tsx scripts/live-e2e-trigger.ts",
     "test:all": "bun test && vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun run src/lib/db/run-migrations.ts"
