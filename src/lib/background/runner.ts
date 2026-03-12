@@ -27,7 +27,11 @@ function sleep(ms: number): Promise<void> {
 }
 
 function canUseTrigger(): boolean {
-  return process.env.USE_TRIGGER_DEV === "true";
+  return (
+    process.env.USE_TRIGGER_DEV === "true" &&
+    Boolean(process.env.APP_BASE_URL) &&
+    Boolean(process.env.BACKGROUND_CALLBACK_SECRET)
+  );
 }
 
 async function runDelegation(agent: string, prompt: string): Promise<string> {
@@ -178,16 +182,15 @@ export async function startBackgroundDelegation(args: {
         threadId: args.threadId,
         agent: args.agent,
         prompt: args.prompt,
+        callbackUrl: `${process.env.APP_BASE_URL}/api/internal/background-callback`,
+        callbackSecret: process.env.BACKGROUND_CALLBACK_SECRET,
       });
 
       await updateBackgroundTask({
         taskId,
         status: "running",
         progress: 5,
-        output: {
-          queuedBy: "trigger",
-          triggerRunId: handle.id,
-        },
+        triggerRunId: handle.id,
       });
 
       await updateRunStatus(runId, "background");

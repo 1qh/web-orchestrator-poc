@@ -1,3 +1,6 @@
+// Reference notes from oh-my-openagent:
+// - src/features/skill-mcp-manager/http-client.ts
+// - src/mcp/index.ts
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
