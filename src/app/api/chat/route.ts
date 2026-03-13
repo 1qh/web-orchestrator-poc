@@ -41,6 +41,11 @@ const requestSchema = z.object({
   id: z.string(),
   message: z.custom<UIMessage>().optional(),
   messages: z.array(z.custom<UIMessage>()).optional(),
+  toolChoice: z
+    .object({
+      toolName: z.enum(["search", "todo", "delegate", "mcp"]),
+    })
+    .optional(),
 });
 
 const searchSchema = z.object({
@@ -120,11 +125,20 @@ export async function POST(request: Request): Promise<Response> {
   const compacted = await maybeCompactContext({ threadId, messages: allMessages });
 
   let finalUsage: LanguageModelUsage | undefined;
+  const forcedToolName = parsed.data.toolChoice?.toolName;
 
   const result = streamText({
     model: google(DEFAULT_MODEL),
     messages: await convertToModelMessages(stripMessageIds(compacted.messages)),
     stopWhen: stepCountIs(8),
+    ...(forcedToolName
+      ? {
+          toolChoice: {
+            type: "tool",
+            toolName: forcedToolName,
+          } as const,
+        }
+      : {}),
     onStepFinish: async (event) => {
       await addRunStep({
         runId,

@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { copyFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
 
 function loadLocalEnvFile(): void {
   const loadEnvFile = (process as unknown as { loadEnvFile?: (path?: string) => void }).loadEnvFile;
@@ -24,6 +26,34 @@ function runBunScript(scriptName: string, extraArgs: string[] = [], env?: NodeJS
 
   if (result.status !== 0) {
     throw new Error(`bun run ${scriptName} failed (exit ${result.status ?? 1})`);
+  }
+}
+
+const TRIGGER_COMPOSE_FILE = resolve(process.cwd(), "trigger-v4.compose.yml");
+const TRIGGER_ENV_TEMPLATE = resolve(process.cwd(), "trigger-v4.env.example");
+const TRIGGER_ENV_FILE = resolve(process.cwd(), "trigger-v4.env");
+
+function ensureTriggerComposeEnvFile(): void {
+  if (existsSync(TRIGGER_ENV_FILE)) {
+    return;
+  }
+
+  copyFileSync(TRIGGER_ENV_TEMPLATE, TRIGGER_ENV_FILE);
+}
+
+function runDockerCompose(args: string[]): void {
+  const result = spawnSync(
+    "docker",
+    ["compose", "--env-file", TRIGGER_ENV_FILE, "-f", TRIGGER_COMPOSE_FILE, ...args],
+    {
+      cwd: process.cwd(),
+      env: { ...process.env },
+      stdio: "inherit",
+    },
+  );
+
+  if (result.status !== 0) {
+    throw new Error(`docker compose ${args.join(" ")} failed (exit ${result.status ?? 1})`);
   }
 }
 
@@ -80,10 +110,11 @@ function parseBootstrapExports(raw: string): Record<string, string> {
 async function main(): Promise<void> {
   loadLocalEnvFile();
   assertApiKeyConfigured();
+  ensureTriggerComposeEnvFile();
 
-  runBunScript("trigger:selfhost:reset");
-  runBunScript("trigger:selfhost:start");
-  runBunScript("trigger:selfhost:status");
+  runDockerCompose(["down", "-v", "--remove-orphans"]);
+  runDockerCompose(["up", "-d"]);
+  runDockerCompose(["ps"]);
 
   const bootstrapOutput = runBunScriptCapture("trigger:selfhost:bootstrap", ["--exports-only"]);
   const bootstrapEnv = parseBootstrapExports(bootstrapOutput);
@@ -111,6 +142,7 @@ async function main(): Promise<void> {
 
   runBunScript("typecheck", [], liveEnv);
   runBunScript("test:e2e", [], liveEnv);
+  runBunScript("test:e2e:live:day-to-day", [], liveEnv);
   runBunScript("test:e2e:live:full", [], liveEnv);
   runBunScript("test:e2e:live:trigger", [], liveEnv);
   runBunScript("build", [], liveEnv);
@@ -125,7 +157,7 @@ void main()
     process.exitCode = 1;
   })
   .finally(() => {
-    spawnSync("bun", ["run", "trigger:selfhost:stop"], {
+    spawnSync("docker", ["compose", "--env-file", TRIGGER_ENV_FILE, "-f", TRIGGER_COMPOSE_FILE, "down"], {
       cwd: process.cwd(),
       env: { ...process.env },
       stdio: "inherit",

@@ -12,6 +12,7 @@
     "test:e2e": "vitest run",
     "test:e2e:live": "tsx scripts/live-e2e.ts",
     "test:e2e:live:full": "tsx scripts/live-e2e-full.ts",
+    "test:e2e:live:day-to-day": "tsx scripts/live-e2e-day-to-day.ts",
     "test:e2e:live:trigger": "tsx scripts/live-e2e-trigger.ts",
     "test:e2e:proof:selfhost": "tsx scripts/live-e2e-proof.ts",
     "trigger:selfhost:start": "tsx scripts/trigger-selfhost/start.ts",
