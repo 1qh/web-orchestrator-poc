@@ -65,6 +65,7 @@ Treat verification as successful only if you see all of these markers:
 - parallel sync/background delegation
 - grounded search capability
 - MCP connectivity plus deterministic MCP tool execution
+- sync tool execution routed through server actions (`src/app/tool-actions.ts`)
 - todo creation/update flow
 - unfinished todo continuation reminder
 - background completion reminder
