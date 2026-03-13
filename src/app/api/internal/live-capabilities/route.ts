@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import type { UIMessage } from "ai";
 import { z } from "zod";
 
+import {
+  executeDelegationAction,
+  executeMcpToolAction,
+  executeSearchAction,
+  executeTodoAction,
+  listMcpServerToolsAction,
+  listMcpServersAction,
+} from "@/app/tool-actions";
 import { maybeCompactContext } from "@/lib/compaction";
 import { ensureUnfinishedTodoContinuationReminder, processDueReminders } from "@/lib/reminders";
 import {
@@ -12,10 +20,6 @@ import {
   loadThreadMessages,
   persistThreadMessages,
 } from "@/lib/store";
-import { runDelegationTool } from "@/lib/tools/delegation";
-import { listMcpServerTools, listMcpServers, runMcpTool } from "@/lib/tools/mcp";
-import { runGroundedSearch } from "@/lib/tools/search";
-import { runTodoTool } from "@/lib/tools/todos";
 
 const requestSchema = z.object({
   threadId: z.string().min(1),
@@ -97,16 +101,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { threadId } = parsed.data;
   await ensureThread(threadId, "live capability verification");
 
-  const search = await runGroundedSearch("Give one concise update about TypeScript 5.9");
+  const search = await executeSearchAction("Give one concise update about TypeScript 5.9");
 
-  const syncDelegation = (await runDelegationTool({
+  const syncDelegation = (await executeDelegationAction({
     mode: "sync",
     threadId,
     agent: "researcher",
     prompt: "Reply with SYNC_OK and one short sentence.",
   })) as { output?: string };
 
-  const parallelSync = (await runDelegationTool({
+  const parallelSync = (await executeDelegationAction({
     mode: "parallel_sync",
     threadId,
     tasks: [
@@ -115,7 +119,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     ],
   })) as { count: number };
 
-  const parallelBackground = (await runDelegationTool({
+  const parallelBackground = (await executeDelegationAction({
     mode: "parallel_background",
     threadId,
     description: "live internal capability verification",
@@ -128,7 +132,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   await Promise.all(parallelBackground.tasks.map((entry) => waitTask(entry.task.taskId)));
   await processDueReminders();
 
-  const created = (await runTodoTool({
+  const created = (await executeTodoAction({
     action: "create",
     threadId,
     content: "real capability todo",
@@ -139,7 +143,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   await processDueReminders();
 
   if (created.created?.id) {
-    await runTodoTool({
+    await executeTodoAction({
       action: "update",
       threadId,
       todoId: created.created.id,
@@ -164,7 +168,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const compacted = await maybeCompactContext({ threadId, messages });
   const latestCompaction = await getLatestCompaction(threadId);
   const usage = await getThreadUsage(threadId);
-  const mcpServers = listMcpServers();
+  const mcpServers = await listMcpServersAction();
 
   const reasoningPartVisible = messages.some((message) =>
     message.parts.some((part) => part.type === "reasoning"),
@@ -202,13 +206,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     mcpConnectivityChecked = true;
     try {
       const firstServerName = mcpServers[0]?.name ?? "";
-      const tools = await listMcpServerTools(firstServerName);
+      const tools = await listMcpServerToolsAction(firstServerName);
       mcpToolCount = tools.tools.length;
       mcpConnectivityOk = true;
 
       if (e2eMcpToolName && tools.tools.some((entry) => entry.name === e2eMcpToolName)) {
         mcpToolCallAttempted = true;
-        await runMcpTool({
+        await executeMcpToolAction({
           serverName: firstServerName,
           toolName: e2eMcpToolName,
           toolArgs: {

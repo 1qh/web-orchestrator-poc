@@ -1,5 +1,13 @@
 import { google } from "@ai-sdk/google";
 import {
+  executeDelegationAction,
+  executeMcpToolAction,
+  executeSearchAction,
+  executeTodoAction,
+  listMcpServerToolsAction,
+  listMcpServersAction,
+} from "@/app/tool-actions";
+import {
   convertToModelMessages,
   stepCountIs,
   streamText,
@@ -21,11 +29,8 @@ import {
 } from "@/lib/store";
 import {
   delegateToolInputSchema,
-  runDelegationTool,
 } from "@/lib/tools/delegation";
-import { listMcpServerTools, listMcpServers, runMcpTool } from "@/lib/tools/mcp";
-import { runGroundedSearch } from "@/lib/tools/search";
-import { runTodoTool, todoToolInputSchema } from "@/lib/tools/todos";
+import { todoToolInputSchema } from "@/lib/tools/todos";
 import {
   ensureUnfinishedTodoContinuationReminder,
   processDueReminders,
@@ -164,25 +169,25 @@ export async function POST(request: Request): Promise<Response> {
       search: tool({
         description: "Grounded web search using Gemini search grounding.",
         inputSchema: searchSchema,
-        execute: async ({ query }) => runGroundedSearch(query),
+        execute: async ({ query }) => executeSearchAction(query),
       }),
       todo: tool({
         description: "Manage todo items in the active thread.",
         inputSchema: todoToolInputSchema,
-        execute: runTodoTool,
+        execute: executeTodoAction,
       }),
       delegate: tool({
         description:
           "Delegate a task to specialized agent modes. Supports sync, background, and parallel execution.",
         inputSchema: delegateToolInputSchema,
-        execute: runDelegationTool,
+        execute: executeDelegationAction,
       }),
       mcp: tool({
         description: "Use configured MCP servers to list tools or call tools.",
         inputSchema: mcpSchema,
         execute: async (input) => {
           if (input.action === "list_servers") {
-            return { servers: listMcpServers() };
+            return { servers: await listMcpServersAction() };
           }
 
           if (input.action === "list_tools") {
@@ -190,14 +195,14 @@ export async function POST(request: Request): Promise<Response> {
               throw new Error("serverName is required for action=list_tools");
             }
 
-            return listMcpServerTools(input.serverName);
+            return listMcpServerToolsAction(input.serverName);
           }
 
           if (!input.serverName || !input.toolName) {
             throw new Error("serverName and toolName are required for action=call_tool");
           }
 
-          return runMcpTool({
+          return executeMcpToolAction({
             serverName: input.serverName,
             toolName: input.toolName,
             toolArgs: input.toolArgs,
