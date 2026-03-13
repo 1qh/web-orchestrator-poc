@@ -30,6 +30,16 @@ cp .env.example .env.local
 
 4. Ensure Docker is running.
 
+5. Trigger.dev v4 is mandatory for this orchestrator's background path. Start it before running the app/proof.
+
+Direct Docker command path:
+
+```bash
+cp trigger-v4.env.example trigger-v4.env
+docker compose --env-file trigger-v4.env -f trigger-v4.compose.yml up -d
+docker compose --env-file trigger-v4.env -f trigger-v4.compose.yml ps
+```
+
 ## 2) One-Command Full Proof
 
 Run:
@@ -46,10 +56,11 @@ This command performs all of the following in sequence:
 4. `trigger:selfhost:bootstrap --exports-only`
 5. `typecheck`
 6. `test:e2e`
-7. `test:e2e:live:full`
-8. `test:e2e:live:trigger`
-9. `build`
-10. `trigger:selfhost:stop` (cleanup)
+7. `test:e2e:live:day-to-day`
+8. `test:e2e:live:full`
+9. `test:e2e:live:trigger`
+10. `build`
+11. `docker compose ... down` (cleanup)
 
 ## 3) Success Markers
 
@@ -58,6 +69,7 @@ Treat verification as successful only if you see all of these markers:
 - `TRIGGER_SELFHOST_STATUS_OK`
 - `LIVE_E2E_FULL_OK`
 - `LIVE_E2E_TRIGGER_OK`
+- `LIVE_E2E_DAY_TO_DAY_OK`
 - `LIVE_E2E_PROOF_OK`
 
 ## 4) What Is Proven by This Run
@@ -76,17 +88,17 @@ Treat verification as successful only if you see all of these markers:
 - context compaction path
 - real Trigger self-host transport path
 
-## 5) Optional Manual Breakdown
+## 5) Manual Breakdown
 
 If you want to run each phase manually:
 
 ```bash
-bun run trigger:selfhost:reset
-bun run trigger:selfhost:start
-bun run trigger:selfhost:status
+docker compose --env-file trigger-v4.env -f trigger-v4.compose.yml up -d
+docker compose --env-file trigger-v4.env -f trigger-v4.compose.yml ps
 eval "$(bun run trigger:selfhost:bootstrap --exports-only)"
 E2E_REQUIRE_TRIGGER=true bun run test:e2e:live:trigger
 bun run test:e2e:live:full
+docker compose --env-file trigger-v4.env -f trigger-v4.compose.yml down
 ```
 
 ## 6) Common Failure Causes

@@ -17,29 +17,24 @@ cp .env.example .env.local
 
 The app auto-aliases `GOOGLE_VERTEX_API_KEY` to `GOOGLE_GENERATIVE_AI_API_KEY` at runtime.
 
-3. Keep self-host mode enabled:
+3. Trigger.dev v4 is a hard dependency for background orchestration.
 
-- `USE_TRIGGER_DEV=false`
-
-This forces background delegations through the local runner (no Trigger.dev remote execution).
-
-Trigger.dev Docker note:
-
-- You typically will not see a local Trigger.dev Docker container in this setup.
-- This project defaults to local in-process background execution unless `USE_TRIGGER_DEV=true` and Trigger credentials are configured.
-- Real Trigger transport verification is provided by `bun run test:e2e:live:trigger`.
+- Keep `USE_TRIGGER_DEV=true` in `.env.local`.
+- Run the local Trigger stack before starting the app.
 
 ## Local Trigger Self-Host (Docker)
 
-This project now includes reproducible scripts to run a local self-hosted Trigger.dev v4 stack.
+Use a single committed compose file (`trigger-v4.compose.yml`) for local Trigger.dev v4.
+
+Direct Docker flow:
 
 ```bash
-bun run trigger:selfhost:reset
-bun run trigger:selfhost:start
-bun run trigger:selfhost:status
+cp trigger-v4.env.example trigger-v4.env
+docker compose --env-file trigger-v4.env -f trigger-v4.compose.yml up -d
+docker compose --env-file trigger-v4.env -f trigger-v4.compose.yml ps
 ```
 
-The scripts clone official Trigger.dev docker assets into `.data/trigger-selfhost/trigger.dev` and run the combined webapp+worker stack.
+Use this stack as the default and required background dependency.
 
 - Dashboard: `http://localhost:18030`
 - MinIO console: `http://localhost:19001`
@@ -65,7 +60,7 @@ eval "$(bun run trigger:selfhost:bootstrap --exports-only)"
 Stop the local self-host stack:
 
 ```bash
-bun run trigger:selfhost:stop
+docker compose --env-file trigger-v4.env -f trigger-v4.compose.yml down
 ```
 
 To point this orchestrator at your local Trigger instance for real transport checks, set in `.env.local`:
@@ -80,7 +75,7 @@ For `test:e2e:live:trigger`, also set:
 
 - `TRIGGER_ACCESS_TOKEN=<personal access token (tr_pat_...) for CLI auth>`
 
-4. Install and run:
+4. Install and run app (after Trigger stack is up):
 
 ```bash
 bun install
@@ -102,12 +97,14 @@ bun test
 bun run test:e2e
 # Requires valid Google API key in .env.local
 bun run test:e2e:live
+# Real day-to-day scenario simulation (planning/search/background/MCP in production mode)
+bun run test:e2e:live:day-to-day
 # Extended non-mock capability verification (real HTTP + real tools + real persistence)
 # Includes deterministic local MCP server startup and strict MCP tool-call assertions
 bun run test:e2e:live:full
 # Optional: real Trigger.dev transport verification (requires TRIGGER_PROJECT_REF + TRIGGER_SECRET_KEY, and TRIGGER_ACCESS_TOKEN for spawned CLI worker auth)
 bun run test:e2e:live:trigger
-# One-command reproducible self-host proof: reset/start/bootstrap Trigger + run strict live verification matrix
+# One-command reproducible self-host proof: docker compose up + bootstrap + strict live verification matrix
 bun run test:e2e:proof:selfhost
 bun run build
 ```
@@ -122,8 +119,8 @@ bun run build
 Recommended reproducible strict local self-host check sequence:
 
 ```bash
-bun run trigger:selfhost:reset
-bun run trigger:selfhost:start
+docker compose --env-file trigger-v4.env -f trigger-v4.compose.yml down -v --remove-orphans
+docker compose --env-file trigger-v4.env -f trigger-v4.compose.yml up -d
 eval "$(bun run trigger:selfhost:bootstrap --exports-only)"
 E2E_REQUIRE_TRIGGER=true bun run test:e2e:live:trigger
 ```

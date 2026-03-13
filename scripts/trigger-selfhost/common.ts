@@ -1,11 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
-export const SELFHOST_ROOT = resolve(process.cwd(), ".data/trigger-selfhost");
-export const TRIGGER_REPO_DIR = resolve(SELFHOST_ROOT, "trigger.dev");
-export const TRIGGER_DOCKER_DIR = resolve(TRIGGER_REPO_DIR, "hosting/docker");
 export const SELFHOST_WEBAPP_URL = "http://127.0.0.1:18030";
+
+const LOCAL_TRIGGER_DIR = resolve(process.cwd());
+const LOCAL_TRIGGER_COMPOSE_FILE = resolve(LOCAL_TRIGGER_DIR, "trigger-v4.compose.yml");
+const LOCAL_TRIGGER_ENV_TEMPLATE = resolve(LOCAL_TRIGGER_DIR, "trigger-v4.env.example");
+const RUNTIME_TRIGGER_ENV_FILE = resolve(process.cwd(), "trigger-v4.env");
 
 function runOrThrow(command: string, args: string[], cwd?: string): string {
   const result = spawnSync(command, args, {
@@ -33,22 +35,19 @@ export function ensureDockerComposeAvailable(): void {
 }
 
 export function ensureTriggerRepoCloned(): void {
-  if (existsSync(TRIGGER_REPO_DIR)) {
-    return;
+  if (!existsSync(LOCAL_TRIGGER_COMPOSE_FILE)) {
+    throw new Error(`Missing Trigger compose file: ${LOCAL_TRIGGER_COMPOSE_FILE}`);
   }
-
-  mkdirSync(dirname(TRIGGER_REPO_DIR), { recursive: true });
-  runOrThrow("git", ["clone", "--depth=1", "https://github.com/triggerdotdev/trigger.dev", TRIGGER_REPO_DIR]);
 }
 
 export function ensureTriggerEnvFile(): void {
-  const envFile = resolve(TRIGGER_DOCKER_DIR, ".env");
-  const envExample = resolve(TRIGGER_DOCKER_DIR, ".env.example");
-  if (existsSync(envFile)) {
+  ensureTriggerRepoCloned();
+
+  if (existsSync(RUNTIME_TRIGGER_ENV_FILE)) {
     return;
   }
 
-  runOrThrow("cp", [envExample, envFile]);
+  copyFileSync(LOCAL_TRIGGER_ENV_TEMPLATE, RUNTIME_TRIGGER_ENV_FILE);
 }
 
 function setEnvValue(content: string, key: string, value: string): string {
@@ -62,8 +61,9 @@ function setEnvValue(content: string, key: string, value: string): string {
 }
 
 export function ensureLocalSelfHostEnvOverrides(): void {
-  const envFile = resolve(TRIGGER_DOCKER_DIR, ".env");
-  let content = readFileSync(envFile, "utf8");
+  ensureTriggerEnvFile();
+
+  let content = readFileSync(RUNTIME_TRIGGER_ENV_FILE, "utf8");
 
   content = setEnvValue(content, "APP_ORIGIN", "http://localhost:18030");
   content = setEnvValue(content, "LOGIN_ORIGIN", "http://localhost:18030");
@@ -74,53 +74,27 @@ export function ensureLocalSelfHostEnvOverrides(): void {
   content = setEnvValue(content, "RUN_REPLICATION_CLICKHOUSE_URL", "http://default:password@clickhouse:8123");
   content = setEnvValue(content, "RUN_REPLICATION_ENABLED", "0");
 
-  writeFileSync(envFile, content, "utf8");
+  writeFileSync(RUNTIME_TRIGGER_ENV_FILE, content, "utf8");
 }
 
 export function ensureLocalSelfHostPortOverrides(): void {
-  const composeFile = resolve(TRIGGER_DOCKER_DIR, "webapp/docker-compose.yml");
-  let content = readFileSync(composeFile, "utf8");
-
-  const replacements: Array<[string, string]> = [
-    [":8030:3000", ":18030:3000"],
-    [":5433:5432", ":15433:5432"],
-    [":6389:6379", ":16389:6379"],
-    [":9123:8123", ":19123:8123"],
-    [":9090:9000", ":19090:9000"],
-    [":5000:5000", ":15000:5000"],
-    [":9000:9000", ":19000:9000"],
-    [":9001:9001", ":19001:9001"],
-  ];
-
-  for (const [from, to] of replacements) {
-    content = content.replace(from, to);
-  }
-
-  if (!content.includes("QUERY_CLICKHOUSE_URL:")) {
-    content = content.replace(
-      "      CLICKHOUSE_URL: ${CLICKHOUSE_URL:-http://default:password@clickhouse:8123?secure=false}",
-      [
-        "      CLICKHOUSE_URL: ${CLICKHOUSE_URL:-http://default:password@clickhouse:8123?secure=false}",
-        "      QUERY_CLICKHOUSE_URL: ${QUERY_CLICKHOUSE_URL:-http://default:password@clickhouse:8123}",
-      ].join("\n"),
-    );
-  }
-
-  writeFileSync(composeFile, content, "utf8");
+  ensureTriggerRepoCloned();
 }
 
 export function compose(args: string[]): string {
+  ensureTriggerEnvFile();
+
   return runOrThrow(
     "docker",
     [
       "compose",
+      "--env-file",
+      RUNTIME_TRIGGER_ENV_FILE,
       "-f",
-      "webapp/docker-compose.yml",
-      "-f",
-      "worker/docker-compose.yml",
+      "trigger-v4.compose.yml",
       ...args,
     ],
-    TRIGGER_DOCKER_DIR,
+    LOCAL_TRIGGER_DIR,
   );
 }
 
