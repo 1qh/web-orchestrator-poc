@@ -4,6 +4,7 @@ type BackgroundTaskResponse = {
   task: {
     id: string;
     status: "pending" | "running" | "completed" | "failed" | "cancelled";
+    progress: number;
     output: unknown;
     errorText: string | null;
   };
@@ -112,6 +113,8 @@ export async function startBackgroundAndWait(
   }
 
   let finalTask: BackgroundTaskResponse["task"] | null = null;
+  let observedRunning = false;
+  let observedProgressAboveZero = false;
   for (let attempts = 0; attempts < 80; attempts++) {
     const polled = await fetch(`${baseUrl}/api/background/${startedPayload.task.taskId}`, {
       cache: "no-store",
@@ -122,6 +125,15 @@ export async function startBackgroundAndWait(
     }
 
     const polledPayload = (await polled.json()) as BackgroundTaskResponse;
+
+    if (polledPayload.task.status === "running") {
+      observedRunning = true;
+    }
+
+    if (polledPayload.task.progress > 0) {
+      observedProgressAboveZero = true;
+    }
+
     if (
       polledPayload.task.status === "completed" ||
       polledPayload.task.status === "failed" ||
@@ -140,6 +152,10 @@ export async function startBackgroundAndWait(
 
   if (finalTask.status !== "completed") {
     throw new Error(`Background task failed: ${finalTask.errorText ?? "unknown error"}`);
+  }
+
+  if (!observedRunning || !observedProgressAboveZero) {
+    throw new Error("Background polling did not observe running status with positive progress");
   }
 
   const output = finalTask.output as { text?: string } | null;
