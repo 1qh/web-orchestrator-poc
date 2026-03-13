@@ -19,7 +19,6 @@
 
 # production
 /build
-/.data
 
 # misc
 .DS_Store
@@ -34,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+trigger-v4.env
+web-orchestrator.sqlite
+web-orchestrator.sqlite-shm
+web-orchestrator.sqlite-wal
 
 # vercel
 .vercel

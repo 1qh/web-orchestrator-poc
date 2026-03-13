@@ -1,5 +1,4 @@
 import { rmSync } from "node:fs";
-import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import {
@@ -8,6 +7,7 @@ import {
   runChatAndAssert,
   startBackgroundAndWait,
 } from "./live-e2e/http-workflow";
+import { resolveDbFilePath } from "./live-e2e/db-path";
 import { startMcpTestServer } from "./live-e2e/mcp-test-server";
 import { assertChatRemainsUsableWhileBackgroundRuns } from "./live-e2e/non-blocking-workflow";
 import { startProductionServer, stopServer, waitForServer } from "./live-e2e/server-process";
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
     },
   ]);
 
-  const dbPath = resolve(process.cwd(), process.env.DB_FILE_PATH ?? ".data/web-orchestrator.sqlite");
+  const dbPath = resolveDbFilePath();
   rmSync(dbPath, { force: true });
 
   const port = Number(process.env.E2E_PORT ?? "3421");

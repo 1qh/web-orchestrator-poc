@@ -5,7 +5,7 @@ export default defineConfig({
   schema: "./src/lib/db/schema.ts",
   out: "./drizzle",
   dbCredentials: {
-    url: process.env.DB_FILE_PATH ?? "./.data/web-orchestrator.sqlite",
+    url: process.env.DB_FILE_PATH ?? "./web-orchestrator.sqlite",
   },
   strict: true,
   verbose: true,

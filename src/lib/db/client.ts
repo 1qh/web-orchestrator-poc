@@ -5,7 +5,12 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 
 import * as schema from "./schema";
 
-const configuredPath = process.env.DB_FILE_PATH ?? ".data/web-orchestrator.sqlite";
+const rawConfiguredPath = process.env.DB_FILE_PATH;
+const configuredPath =
+  rawConfiguredPath === ".data/web-orchestrator.sqlite" ||
+  rawConfiguredPath === "./.data/web-orchestrator.sqlite"
+    ? "web-orchestrator.sqlite"
+    : rawConfiguredPath ?? "web-orchestrator.sqlite";
 
 const normalizedPath = configuredPath.startsWith("/")
   ? configuredPath

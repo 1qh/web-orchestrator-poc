@@ -1,5 +1,4 @@
 import { rmSync } from "node:fs";
-import { resolve } from "node:path";
 
 import {
   assertFinalThreadState,
@@ -7,6 +6,7 @@ import {
   runChatAndAssert,
   startBackgroundAndWait,
 } from "./live-e2e/http-workflow";
+import { resolveDbFilePath } from "./live-e2e/db-path";
 import { startServer, stopServer, waitForServer } from "./live-e2e/server-process";
 
 function loadLocalEnvFile(): void {
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   loadLocalEnvFile();
   assertApiKeyConfigured();
 
-  const dbPath = resolve(process.cwd(), process.env.DB_FILE_PATH ?? ".data/web-orchestrator.sqlite");
+  const dbPath = resolveDbFilePath();
   rmSync(dbPath, { force: true });
 
   const port = Number(process.env.E2E_PORT ?? "3411");

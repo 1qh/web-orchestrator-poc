@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 
+import { resolveDbFilePath } from "./live-e2e/db-path";
 import { createThread } from "./live-e2e/http-workflow";
 import { sleep, startServer, stopServer, waitForServer } from "./live-e2e/server-process";
 
@@ -108,7 +109,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const dbPath = resolve(process.cwd(), process.env.DB_FILE_PATH ?? ".data/web-orchestrator.sqlite");
+  const dbPath = resolveDbFilePath();
   rmSync(dbPath, { force: true });
 
   const port = Number(process.env.E2E_TRIGGER_PORT ?? "3431");
